@@ -1,368 +1,262 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { ActiveTab, AudioBookTrack, PowerAffirmation, WisdomQuote, JapamalaState, ReaderSettings, RoutineTask, VaultEntry, WeightEntry, ExerciseGuide, UploadedVideo, SyllabusTopic, ConcursoHeaderInfo, WaterLog, MonthlyTrophy } from './types';
-import { RuseTimeGlow } from './hooks/useTimeGlow';
-import { StorageService } from './utils/storage';
-import { SoundEngine } from './utils/audio';
-
-// Components
-import { Navbar } from './components/layout/Navbar';
-import { BottomBar } from './components/layout/BottomBar';
-import { GlobalAudioPlayer } from './components/audio/GlobalAudioPlayer';
-import { PwaInstallPrompt } from './components/pwa/PwaInstallPrompt';
-
-// Modules
-import { InicioModule } from './components/modules/InicioModule';
-import { MenteInabalavelModule } from './components/modules/MenteInabalavelModule';
-import { RotinaModule } from './components/modules/RotinaModule';
-import { TreinosModule } from './components/modules/TreinosModule';
-import { EstudosModule } from './components/modules/EstudosModule';
-import { FeModule } from './components/modules/FeModule';
-import { ProgressoModule } from './components/modules/ProgressoModule';
+import React, { useState, useEffect } from 'react';
+import { 
+  Heart, 
+  Droplets, 
+  Activity, 
+  Timer, 
+  Moon, 
+  Sun, 
+  Plus, 
+  Minus, 
+  RotateCcw,
+  CheckCircle2
+} from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('inicio');
-  const { mode, changeMode, isDaytime, glowStyles } = useTimeGlow();
+  const [activeTab, setActiveTab] = useState<'home' | 'water' | 'japamala' | 'timer'>('home');
+  const [waterGlasses, setWaterGlasses] = useState<number>(() => {
+    const saved = localStorage.getItem('water_count');
+    return saved ? JSON.parse(saved) : 0;
+  });
+  const [japaCount, setJapaCount] = useState<number>(() => {
+    const saved = localStorage.getItem('japa_count');
+    return saved ? JSON.parse(saved) : 0;
+  });
+  const [timerSeconds, setTimerSeconds] = useState<number>(0);
+  const [isTimerRunning, setIsTimerRunning] = useState<boolean>(false);
 
-  // PWA installation state
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  // Persistence
+  useEffect(() => {
+    localStorage.setItem('water_count', JSON.stringify(waterGlasses));
+  }, [waterGlasses]);
 
   useEffect(() => {
-    const handleBeforeInstallPrompt = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-  }, []);
+    localStorage.setItem('japa_count', JSON.stringify(japaCount));
+  }, [japaCount]);
 
-  const handleInstallPWA = () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      deferredPrompt.userChoice.then((choiceResult: any) => {
-        if (choiceResult.outcome === 'accepted') {
-          console.log('PWA instalado com sucesso!');
-        }
-        setDeferredPrompt(null);
-      });
-    }
-  };
-
-  // --- STATE WITH OFFLINE STORAGE ---
-  const [affirmations, setAffirmations] = useState<PowerAffirmation[]>(() => StorageService.getAffirmations());
-  const [wisdomQuotes, setWisdomQuotes] = useState<WisdomQuote[]>(() => StorageService.getWisdomQuotes());
-  const [japamala, setJapamala] = useState<JapamalaState>(() => StorageService.getJapamala());
-  const [readerSettings, setReaderSettings] = useState<ReaderSettings>(() => StorageService.getReaderSettings());
-  const [routines, setRoutines] = useState<RoutineTask[]>(() => StorageService.getRoutines());
-  const [vaultEntries, setVaultEntries] = useState<VaultEntry[]>(() => StorageService.getVault());
-  const [weights, setWeights] = useState<WeightEntry[]>(() => StorageService.getWeights());
-  const [exercises, setExercises] = useState<ExerciseGuide[]>(() => StorageService.getExercises());
-  const [videos, setVideos] = useState<UploadedVideo[]>(() => StorageService.getVideos());
-  const [syllabus, setSyllabus] = useState<SyllabusTopic[]>(() => StorageService.getSyllabus());
-  const [concursoInfo, setConcursoInfo] = useState<ConcursoHeaderInfo>(() => StorageService.getConcursoInfo());
-  const [notebookText, setNotebookText] = useState<string>(() => StorageService.getNotebook());
-  const [waterLogs, setWaterLogs] = useState<WaterLog[]>(() => StorageService.getWaterLogs());
-  const [waterTarget, setWaterTarget] = useState<number>(() => StorageService.getWaterTarget());
-  const [trophies, setTrophies] = useState<MonthlyTrophy[]>(() => StorageService.getTrophies());
-  const [complaintStreak, setComplaintStreak] = useState<number>(() => StorageService.getComplaintStreak());
-
-  // --- AUDIOBOOK ENGINE STATE ---
-  const [currentAudioTrack, setCurrentAudioTrack] = useState<AudioBookTrack | null>(null);
-  const [isAudioPlaying, setIsAudioPlaying] = useState<boolean>(false);
-  const [activeParagraphIndex, setActiveParagraphIndex] = useState<number>(0);
-
-  // Web Speech API utterance ref
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-
-  // Update storage on state updates
-  const handleUpdateAffirmations = (newVal: PowerAffirmation[]) => {
-    setAffirmations(newVal);
-    StorageService.saveAffirmations(newVal);
-  };
-
-  const handleUpdateJapamala = (newVal: JapamalaState) => {
-    setJapamala(newVal);
-    StorageService.saveJapamala(newVal);
-  };
-
-  const handleUpdateRoutines = (newVal: RoutineTask[]) => {
-    setRoutines(newVal);
-    StorageService.saveRoutines(newVal);
-  };
-
-  const handleUpdateVault = (newVal: VaultEntry[]) => {
-    setVaultEntries(newVal);
-    StorageService.saveVault(newVal);
-  };
-
-  const handleUpdateWeights = (newVal: WeightEntry[]) => {
-    setWeights(newVal);
-    StorageService.saveWeights(newVal);
-  };
-
-  const handleUpdateSyllabus = (newVal: SyllabusTopic[]) => {
-    setSyllabus(newVal);
-    StorageService.saveSyllabus(newVal);
-  };
-
-  const handleUpdateNotebook = (newVal: string) => {
-    setNotebookText(newVal);
-    StorageService.saveNotebook(newVal);
-  };
-
-  const handleUpdateWaterLogs = (newVal: WaterLog[]) => {
-    setWaterLogs(newVal);
-    StorageService.saveWaterLogs(newVal);
-  };
-
-  // --- TTS SPEECH SYNTHESIS ENGINE ---
-  const speakCurrentParagraph = (track: AudioBookTrack, pIndex: number) => {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
-
-    window.speechSynthesis.cancel(); // stop current utterance
-
-    if (!track.contentParagraphs || !track.contentParagraphs[pIndex]) return;
-
-    const textToSpeak = track.contentParagraphs[pIndex];
-    const utterance = new SpeechSynthesisUtterance(textToSpeak);
-    utterance.lang = 'pt-BR';
-    utterance.rate = readerSettings.ttsSpeed || 1.0;
-
-    utterance.onend = () => {
-      // Advance to next paragraph automatically!
-      if (pIndex + 1 < track.contentParagraphs.length) {
-        setActiveParagraphIndex(pIndex + 1);
-        speakCurrentParagraph(track, pIndex + 1);
-      } else {
-        setIsAudioPlaying(false);
-      }
-    };
-
-    utterance.onerror = () => {
-      setIsAudioPlaying(false);
-    };
-
-    utteranceRef.current = utterance;
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const handlePlayAudioTrack = (track: AudioBookTrack, paragraphIndex = 0) => {
-    setCurrentAudioTrack(track);
-    setActiveParagraphIndex(paragraphIndex);
-    setIsAudioPlaying(true);
-    speakCurrentParagraph(track, paragraphIndex);
-  };
-
-  const handleToggleAudioPlay = () => {
-    if (!currentAudioTrack) return;
-
-    if (isAudioPlaying) {
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        window.speechSynthesis.pause();
-      }
-      setIsAudioPlaying(false);
+  // Timer effect
+  useEffect(() => {
+    let interval: any = null;
+    if (isTimerRunning) {
+      interval = setInterval(() => {
+        setTimerSeconds((prev) => prev + 1);
+      }, 1000);
     } else {
-      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-        if (window.speechSynthesis.paused) {
-          window.speechSynthesis.resume();
-        } else {
-          speakCurrentParagraph(currentAudioTrack, activeParagraphIndex);
-        }
-      }
-      setIsAudioPlaying(true);
+      clearInterval(interval);
     }
-  };
+    return () => clearInterval(interval);
+  }, [isTimerRunning]);
 
-  const handleNextParagraph = () => {
-    if (!currentAudioTrack) return;
-    const nextIdx = Math.min(currentAudioTrack.contentParagraphs.length - 1, activeParagraphIndex + 1);
-    setActiveParagraphIndex(nextIdx);
-    if (isAudioPlaying) speakCurrentParagraph(currentAudioTrack, nextIdx);
-  };
-
-  const handlePrevParagraph = () => {
-    if (!currentAudioTrack) return;
-    const prevIdx = Math.max(0, activeParagraphIndex - 1);
-    setActiveParagraphIndex(prevIdx);
-    if (isAudioPlaying) speakCurrentParagraph(currentAudioTrack, prevIdx);
-  };
-
-  const handleUpdateReaderSettings = (newSettings: Partial<ReaderSettings>) => {
-    const updated = { ...readerSettings, ...newSettings };
-    setReaderSettings(updated);
-    StorageService.saveReaderSettings(updated);
-  };
-
-  const handleQuickWater = (amountMl: number) => {
-    SoundEngine.triggerHaptic(20);
-    SoundEngine.playJapamalaChime();
-    const newLog: WaterLog = {
-      id: `wl-${Date.now()}`,
-      amountMl,
-      timestamp: new Date().toISOString()
-    };
-    handleUpdateWaterLogs([...waterLogs, newLog]);
+  const formatTime = (totalSeconds: number) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-slate-100 font-sans flex flex-col relative overflow-x-hidden">
-      {/* ELEGANT DARK SUNSET SIDE GLOW OVERLAYS */}
-      <div className="sunset-glow-left" />
-      <div className="sunset-glow-right" />
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans">
+      {/* Header */}
+      <header className="bg-emerald-600 text-white p-4 shadow-md flex justify-between items-center">
+        <div className="flex items-center space-x-2">
+          <Heart className="w-6 h-6 text-rose-300 fill-current" />
+          <h1 className="text-xl font-bold tracking-wide">Vida e Saúde</h1>
+        </div>
+        <span className="text-xs bg-emerald-700 px-2.5 py-1 rounded-full text-emerald-100">PWA Ready</span>
+      </header>
 
-      {/* DYNAMIC SOL E NOITE BORDER GLOW CONTAINERS */}
-      <div
-        className={`fixed top-0 bottom-0 left-0 w-2 z-30 pointer-events-none transition-all duration-700 ${glowStyles.borderGlowLeft}`}
-      />
-      <div
-        className={`fixed top-0 bottom-0 right-0 w-2 z-30 pointer-events-none transition-all duration-700 ${glowStyles.borderGlowRight}`}
-      />
+      {/* Main Content Area */}
+      <main className="flex-1 p-4 max-w-md mx-auto w-full pb-24">
+        {activeTab === 'home' && (
+          <div className="space-y-4">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 text-center">
+              <h2 className="text-2xl font-bold text-slate-800">Bem-vindo ao seu diário de bem-estar!</h2>
+              <p className="text-slate-500 text-sm mt-2">Acompanhe seus hábitos diários de saúde e hidratação.</p>
+            </div>
 
-      {/* HEADER NAVBAR */}
-      <Navbar
-        activeTab={activeTab}
-        timeMode={mode}
-        isDaytime={isDaytime}
-        onToggleTimeMode={() => {
-          const nextMode = mode === 'auto' ? 'sol' : mode === 'sol' ? 'noite' : 'auto';
-          changeMode(nextMode);
-        }}
-        complaintStreak={complaintStreak}
-        canInstallPWA={true}
-        onInstallPWA={handleInstallPWA}
-      />
+            <div className="grid grid-cols-2 gap-4">
+              <div 
+                onClick={() => setActiveTab('water')}
+                className="bg-blue-50 border border-blue-100 p-4 rounded-xl cursor-pointer hover:bg-blue-100 transition-colors"
+              >
+                <Droplets className="w-8 h-8 text-blue-500 mb-2" />
+                <h3 className="font-semibold text-blue-900">Hidratação</h3>
+                <p className="text-2xl font-bold text-blue-600 mt-1">{waterGlasses * 250} ml</p>
+                <p className="text-xs text-blue-400 mt-1">{waterGlasses} copos de 250ml</p>
+              </div>
 
-      {/* MAIN CONTAINER */}
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-6">
-        {activeTab === 'inicio' && (
-          <InicioModule
-            affirmation={affirmations[0]}
-            complaintStreak={complaintStreak}
-            routines={routines}
-            onSelectTab={setActiveTab}
-            onDeclareAffirmation={() => {
-              SoundEngine.triggerHaptic([40, 30, 60]);
-              SoundEngine.playJapamalaChime();
-              const updated = affirmations.map((a, i) => (i === 0 ? { ...a, declaredToday: true } : a));
-              handleUpdateAffirmations(updated);
-            }}
-            onQuickWater={handleQuickWater}
-          />
-        )}
+              <div 
+                onClick={() => setActiveTab('japamala')}
+                className="bg-purple-50 border border-purple-100 p-4 rounded-xl cursor-pointer hover:bg-purple-100 transition-colors"
+              >
+                <Activity className="w-8 h-8 text-purple-500 mb-2" />
+                <h3 className="font-semibold text-purple-900">Japamala</h3>
+                <p className="text-2xl font-bold text-purple-600 mt-1">{japaCount} / 108</p>
+                <p className="text-xs text-purple-400 mt-1">Repetições concluídas</p>
+              </div>
+            </div>
 
-        {activeTab === 'rotina' && (
-          <div className="space-y-6">
-            <MenteInabalavelModule
-              affirmations={affirmations}
-              wisdomQuotes={wisdomQuotes}
-              japamala={japamala}
-              onUpdateAffirmations={handleUpdateAffirmations}
-              onUpdateJapamala={handleUpdateJapamala}
-            />
-            <RotinaModule
-              routines={routines}
-              vaultEntries={vaultEntries}
-              complaintStreak={complaintStreak}
-              onUpdateRoutines={handleUpdateRoutines}
-              onUpdateVault={handleUpdateVault}
-              onUpdateComplaintStreak={(s) => {
-                setComplaintStreak(s);
-                StorageService.saveComplaintStreak(s);
-              }}
-            />
+            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl flex items-center space-x-4">
+              <Timer className="w-8 h-8 text-emerald-600 flex-shrink-0" />
+              <div>
+                <h3 className="font-semibold text-emerald-900">Exercício / Meditação</h3>
+                <p className="text-sm text-emerald-700">Tempo ativo hoje: {formatTime(timerSeconds)}</p>
+              </div>
+            </div>
           </div>
         )}
 
-        {activeTab === 'treinos' && (
-          <TreinosModule
-            weights={weights}
-            exercises={exercises}
-            videos={videos}
-            onUpdateWeights={handleUpdateWeights}
-            onUpdateExercises={(ex) => {
-              setExercises(ex);
-              StorageService.saveExercises(ex);
-            }}
-            onUpdateVideos={(vids) => {
-              setVideos(vids);
-              StorageService.saveVideos(vids);
-            }}
-          />
+        {activeTab === 'water' && (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 text-center space-y-6">
+            <div className="inline-flex p-4 bg-blue-50 rounded-full text-blue-500">
+              <Droplets className="w-12 h-12" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-slate-800">Contador de Água</h2>
+              <p className="text-slate-500 text-sm">Meta diária: 2000 ml (8 copos)</p>
+            </div>
+
+            <div className="text-4xl font-extrabold text-blue-600">
+              {waterGlasses * 250} <span className="text-lg font-medium text-slate-400">ml</span>
+            </div>
+
+            <div className="flex justify-center items-center space-x-4">
+              <button 
+                onClick={() => setWaterGlasses(prev => Math.max(0, prev - 1))}
+                className="p-3 bg-slate-100 rounded-full text-slate-600 hover:bg-slate-200"
+              >
+                <Minus className="w-6 h-6" />
+              </button>
+              <span className="text-xl font-semibold w-12">{waterGlasses}</span>
+              <button 
+                onClick={() => setWaterGlasses(prev => prev + 1)}
+                className="p-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 shadow-md"
+              >
+                <Plus className="w-6 h-6" />
+              </button>
+            </div>
+
+            <button 
+              onClick={() => setWaterGlasses(0)}
+              className="text-xs text-slate-400 hover:text-slate-600 flex items-center justify-center mx-auto space-x-1"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Zerar contador</span>
+            </button>
+          </div>
         )}
 
-        {activeTab === 'estudos' && (
-          <EstudosModule
-            syllabus={syllabus}
-            concursoInfo={concursoInfo}
-            notebookText={notebookText}
-            onUpdateSyllabus={handleUpdateSyllabus}
-            onUpdateConcursoInfo={(info) => {
-              setConcursoInfo(info);
-              StorageService.saveConcursoInfo(info);
-            }}
-            onUpdateNotebook={handleUpdateNotebook}
-            onPlayAudioTrack={handlePlayAudioTrack}
-          />
+        {activeTab === 'japamala' && (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 text-center space-y-6">
+            <div className="inline-flex p-4 bg-purple-50 rounded-full text-purple-500">
+              <Activity className="w-12 h-12" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-slate-800">Contador Japamala</h2>
+              <p className="text-slate-500 text-sm">Contagem de mantras (Ciclo de 108)</p>
+            </div>
+
+            <div className="text-5xl font-extrabold text-purple-600">
+              {japaCount}
+            </div>
+
+            <button 
+              onClick={() => setJapaCount(prev => (prev >= 108 ? 0 : prev + 1))}
+              className="w-full py-6 bg-purple-600 text-white text-xl font-bold rounded-2xl hover:bg-purple-700 shadow-lg active:scale-95 transition-transform"
+            >
+              Contar Mantra +1
+            </button>
+
+            <div className="flex justify-between items-center pt-2">
+              <button 
+                onClick={() => setJapaCount(0)}
+                className="text-xs text-slate-400 hover:text-slate-600 flex items-center space-x-1"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reiniciar</span>
+              </button>
+              {japaCount >= 108 && (
+                <span className="text-xs font-semibold text-emerald-600 flex items-center space-x-1">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Ciclo Completo!</span>
+                </span>
+              )}
+            </div>
+          </div>
         )}
 
-        {activeTab === 'fe' && (
-          <FeModule
-            currentPlayingTrack={currentAudioTrack}
-            isPlaying={isAudioPlaying}
-            activeParagraphIndex={activeParagraphIndex}
-            readerSettings={readerSettings}
-            onPlayTrack={handlePlayAudioTrack}
-            onTogglePlay={handleToggleAudioPlay}
-          />
-        )}
+        {activeTab === 'timer' && (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 text-center space-y-6">
+            <div className="inline-flex p-4 bg-emerald-50 rounded-full text-emerald-600">
+              <Timer className="w-12 h-12" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-slate-800">Cronômetro de Atividade</h2>
+              <p className="text-slate-500 text-sm">Monitore o tempo de meditação ou treinos</p>
+            </div>
 
-        {activeTab === 'progresso' && (
-          <ProgressoModule
-            waterLogs={waterLogs}
-            waterTarget={waterTarget}
-            weights={weights}
-            syllabus={syllabus}
-            trophies={trophies}
-            japamala={japamala}
-            onUpdateWaterLogs={handleUpdateWaterLogs}
-            onUpdateWaterTarget={(t) => {
-              setWaterTarget(t);
-              StorageService.saveWaterTarget(t);
-            }}
-          />
+            <div className="text-5xl font-mono font-bold text-emerald-600">
+              {formatTime(timerSeconds)}
+            </div>
+
+            <div className="flex justify-center space-x-4">
+              <button 
+                onClick={() => setIsTimerRunning(!isTimerRunning)}
+                className={`px-6 py-3 rounded-xl font-semibold text-white shadow-md transition-colors ${
+                  isTimerRunning ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
+              >
+                {isTimerRunning ? 'Pausar' : 'Iniciar'}
+              </button>
+              <button 
+                onClick={() => { setIsTimerRunning(false); setTimerSeconds(0); }}
+                className="px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-semibold hover:bg-slate-200"
+              >
+                Zerar
+              </button>
+            </div>
+          </div>
         )}
       </main>
 
-      {/* GLOBAL AUDIO PLAYER FLOATING MINI BAR */}
-      <GlobalAudioPlayer
-        currentTrack={currentAudioTrack}
-        isPlaying={isAudioPlaying}
-        activeParagraphIndex={activeParagraphIndex}
-        readerSettings={readerSettings}
-        onTogglePlay={handleToggleAudioPlay}
-        onNextParagraph={handleNextParagraph}
-        onPrevParagraph={handlePrevParagraph}
-        onSelectParagraph={(idx) => {
-          setActiveParagraphIndex(idx);
-          if (currentAudioTrack) speakCurrentParagraph(currentAudioTrack, idx);
-        }}
-        onClosePlayer={() => {
-          if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
-          }
-          setIsAudioPlaying(false);
-          setCurrentAudioTrack(null);
-        }}
-        onUpdateSettings={handleUpdateReaderSettings}
-      />
-
-      {/* PWA INSTALLATION BANNER & MODAL */}
-      <PwaInstallPrompt
-        deferredPrompt={deferredPrompt}
-        onInstall={handleInstallPWA}
-      />
-
-      {/* 6-COLUMN BOTTOM NAVIGATION BAR */}
-      <BottomBar activeTab={activeTab} onSelectTab={setActiveTab} />
+      {/* Bottom Navigation */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around p-3 max-w-md mx-auto z-10">
+        <button 
+          onClick={() => setActiveTab('home')}
+          className={`flex flex-col items-center text-xs font-medium ${
+            activeTab === 'home' ? 'text-emerald-600' : 'text-slate-400'
+          }`}
+        >
+          <Heart className="w-6 h-6 mb-1" />
+          Início
+        </button>
+        <button 
+          onClick={() => setActiveTab('water')}
+          className={`flex flex-col items-center text-xs font-medium ${
+            activeTab === 'water' ? 'text-blue-600' : 'text-slate-400'
+          }`}
+        >
+          <Droplets className="w-6 h-6 mb-1" />
+          Água
+        </button>
+        <button 
+          onClick={() => setActiveTab('japamala')}
+          className={`flex flex-col items-center text-xs font-medium ${
+            activeTab === 'japamala' ? 'text-purple-600' : 'text-slate-400'
+          }`}
+        >
+          <Activity className="w-6 h-6 mb-1" />
+          Japamala
+        </button>
+        <button 
+          onClick={() => setActiveTab('timer')}
+          className={`flex flex-col items-center text-xs font-medium ${
+            activeTab === 'timer' ? 'text-emerald-600' : 'text-slate-400'
+          }`}
+        >
+          <Timer className="w-6 h-6 mb-1" />
+          Cronômetro
+        </button>
+      </nav>
     </div>
   );
 }
